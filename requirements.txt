@@ -1,0 +1,13 @@
+confluent_kafka
+datetime
+pandas
+numpy
+time
+random
+geopy
+retrying
+psycopg2
+sqlalchemy
+json
+py4j
+uuid
