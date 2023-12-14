@@ -135,20 +135,21 @@ if __name__=='__main__':
     store_topic = 'store'
 
     create_table(conn, cur)
+    
+    while True:
+        for i in range(10):
+            data = generate_log()
+            
+            # Ingest data to postgre database
+            insert_record_postgre(conn, cur, data)
+            print(f'Sent data to postgres database: {data}')
 
-    for i in range(10):
-        data = generate_log()
-        
-        # Ingest data to postgre database
-        insert_record_postgre(conn, cur, data)
-        print(f'Sent data to postgres database: {data}')
-
-        # produce data to Kakfa
-        producer.produce(
-            store_topic,
-            key=data["ts_id"],
-            value=json.dumps(data),
-            on_delivery=delivery_report
-        )
-        print('Produced voter {}, data: {}'.format(i, data))
-        producer.flush()
+            # produce data to Kakfa
+            producer.produce(
+                store_topic,
+                key=data["ts_id"],
+                value=json.dumps(data),
+                on_delivery=delivery_report
+            )
+            print('Produced voter {}, data: {}'.format(i, data))
+            producer.flush()

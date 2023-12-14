@@ -1,4 +1,3 @@
-import pyspark
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import *
 from pyspark.sql.types import *
@@ -7,18 +6,14 @@ spark = (SparkSession.builder
             .appName("StoreAnalysis")
             .master("local[*]")  # Use local Spark execution with all available cores
             .config("spark.jars.packages",
-                    "org.apache.spark:spark-sql-kafka-0-10_2.12:3.3.0")  # Spark-Kafka integration
-            .config("spark.jars",
-                    "postgresql-42.7.1.jar")  # PostgreSQL driver
+                    "org.apache.spark:spark-sql-kafka-0-10_2.12:3.3.0,"\
+                    "org.postgresql:postgresql:42.7.1")  # Spark-Kafka integration
             .config("spark.sql.adaptive.enabled", "false")  # Disable adaptive query execution
             .getOrCreate())
 
-# store_df = spark.read.option("header", True).csv('sample_superstore.csv')
-# store_df.show(5,False)
-
 store_record_schema = StructType([
         StructField("ts_id", StringType(), True),
-        StructField("ts", StringType(), True),
+        StructField("ts", TimestampType(), True),
         StructField("customer_id", StringType(), True),
         StructField("customer_name", StringType(), True),
         StructField("segment", StringType(), True),
@@ -44,4 +39,20 @@ store_df = spark.readStream\
     .select(from_json(col("value"), store_record_schema).alias("data")) \
     .select("data.*")
 
-store_df.show(5,False)
+enriched_store_df = store_df.withWatermark("ts", "1 minute")
+
+def foreach_batch_function(df, epoch_id):
+    df.format("jdbc").option("url", f"jdbc:postgresql://postgres:5432/store")\
+      .option("dbtable","store_df").option("user","postgres")\
+      .option("password", "postgres").save()
+  
+store_df.writeStream.foreachBatch(foreach_batch_function).start()   
+
+# top5_most_bought_product_name_to_kafka = (top5_most_bought_product_name.selectExpr("to_json(struct(*)) AS value") \
+#         .writeStream \
+#         .format("kafka") \
+#         .option("kafka.bootstrap.servers", "broker:29092") \
+#         .option("topic", "top5_most_bought_product_name") \
+#         .option("checkpointLocation", "checkpoints/checkpoint1") \
+#         .outputMode("update") \
+#         .start())

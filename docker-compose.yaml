@@ -92,9 +92,9 @@ services:
       retries: 5
 
   spark-master:
+    build: ./spark
     container_name: spark-master
-    command: 
-      - bin/spark-class org.apache.spark.deploy.master.Master
+    command: bin/spark-class org.apache.spark.deploy.master.Master
     ports:
       - "9090:8080"
       - "7077:7077"
@@ -107,7 +107,7 @@ services:
       - confluent
   
   spark-worker:
-    image: bitnami/spark:latest
+    image: bitnami/spark:3.3.3
     container_name: spark-worker
     command: bin/spark-class org.apache.spark.deploy.worker.Worker spark://spark-master:7077
     depends_on:
