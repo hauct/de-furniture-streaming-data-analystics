@@ -3,48 +3,53 @@ import pandas as pd
 import time
 import random
 from geopy.geocoders import Nominatim
-from retrying import retry
 import psycopg2
 from sqlalchemy import create_engine
-import json
+import simplejson as json
 from confluent_kafka import SerializingProducer
 import uuid
+import logging
+# import pendulum
 
-## Kafka settings
-def delivery_report(err, msg):
-    if err is not None:
-        print(f'Message delivery failed: {err}')
-    else:
-        print(f'Message delivered to {msg.topic()} [{msg.partition()}]')
+# from airflow import DAG
+# from airflow.operators.python import PythonOperator
 
-## Postgres settings
-def create_table(conn, cur):
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS store_record (
-            ts_id TEXT PRIMARY KEY,
-            ts TIMESTAMP,
-            customer_id VARCHAR(255),
-            customer_name VARCHAR(255),
-            segment VARCHAR(255),
-            country VARCHAR(255),
-            city VARCHAR(255),
-            category VARCHAR(255),
-            sub_category VARCHAR(255),
-            price FLOAT,
-            quantity INTEGER,
-            revenue FLOAT,
-            lat_long point                
-        )
-    """)
-    conn.commit()
 
-def insert_record_postgre(conn, cur, data):
-    cur.execute('''
-        INSERT INTO store_record (ts_id, ts, customer_id, customer_name, segment, country, city, category, sub_category, price, quantity, revenue, lat_long)
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-    ''', (data['ts_id'], data['ts'], data['customer_id'], data['customer_name'], data['segment'], data['country'],
-          data['city'], data['category'], data['sub_category'], data['price'], data['quantity'], data['revenue'], data['lat_long']))
-    conn.commit()
+# ## Kafka settings
+# def delivery_report(err, msg):
+#     if err is not None:
+#         print(f'Message delivery failed: {err}')
+#     else:
+#         print(f'Message delivered to {msg.topic()} [{msg.partition()}]')
+
+# ## Postgres settings
+# def create_table(conn, cur):
+#     cur.execute("""
+#         CREATE TABLE IF NOT EXISTS store_record (
+#             ts_id TEXT PRIMARY KEY,
+#             ts TIMESTAMP,
+#             customer_id VARCHAR(255),
+#             customer_name VARCHAR(255),
+#             segment VARCHAR(255),
+#             country VARCHAR(255),
+#             city VARCHAR(255),
+#             category VARCHAR(255),
+#             sub_category VARCHAR(255),
+#             price FLOAT,
+#             quantity INTEGER,
+#             revenue FLOAT,
+#             lat_long point                
+#         )
+#     """)
+#     conn.commit()
+
+# def insert_record_postgre(conn, cur, data):
+#     cur.execute('''
+#         INSERT INTO store_record (ts_id, ts, customer_id, customer_name, segment, country, city, category, sub_category, price, quantity, revenue, lat_long)
+#         VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+#     ''', (data['ts_id'], data['ts'], data['customer_id'], data['customer_name'], data['segment'], data['country'],
+#           data['city'], data['category'], data['sub_category'], data['price'], data['quantity'], data['revenue'], data['lat_long']))
+#     conn.commit()
 
 ## -----------------Get a random customer information---------------------
 def extract_customer_info(sample_df):
@@ -73,7 +78,7 @@ def generate_product_info(product_info):
 
 ## -----------------Get random number of records--------------------------
 ### Generate a random date in December 2023
-def generate_date_time():
+def generate_date_time(day):
     day = random.randint(1, 31)
     hour = random.randint(0, 23)
     minute = random.randint(0, 59)
@@ -84,7 +89,6 @@ def generate_date_time():
     return timestamp.strftime('%Y-%m-%d %H:%M:%S')
 
 ### Navicate the latitude ang longitude
-@retry(wait_exponential_multiplier=1000, wait_exponential_max=10000)
 def get_lat_long(city, country):
     geolocator = Nominatim(user_agent='hauct_geopy_key')
     location = geolocator.geocode(f'{city}, {country}', timeout=10)
@@ -96,7 +100,7 @@ def get_lat_long(city, country):
     return None
 
 ### Generate records
-def generate_log():
+def generate_log(day, sample_df):
     customer_info_df = extract_customer_info(sample_df)
     product_info_df = extract_product_info(sample_df)
     discount_list = [0.5, 0.4, 0.3, 0]
@@ -105,7 +109,7 @@ def generate_log():
     product_info_dict = generate_product_info(product_info_df)
     quantity = random.randint(1,20)
     discount = random.choices(discount_list, weights=(0.5,0.15,0.2,0.6))[0]
-    ts = generate_date_time()
+    ts = generate_date_time(day)
     
     data = {'ts_id': str(uuid.uuid4()),
             'ts':f'{ts}',
@@ -125,31 +129,40 @@ def generate_log():
             }
     return data
 
-if __name__=='__main__':
-    sample_df = pd.read_csv('sample_superstore.csv')
-    
-    conn = psycopg2.connect("host=localhost dbname=store user=postgres password=postgres")
-    cur = conn.cursor()
+def stream_data():
+    sample_df = pd.read_csv('./data/sample_superstore.csv')
+    producer = SerializingProducer({'bootstrap.servers': 'broker:29092'})
+    topic = 'store_daily_records'
 
-    producer = SerializingProducer({'bootstrap.servers': 'localhost:9092', })
-    store_topic = 'store'
+    for day in range(1,32):
+        for _ in range(random.randint(1,30)):
+            try:
+                data = generate_log(day, sample_df)
+                producer.produce(topic, key=data["ts_id"], value=json.dumps(data).encode('utf-8'))
 
-    create_table(conn, cur)
-    
-    while True:
-        for i in range(10):
-            data = generate_log()
+            except Exception as e:
+                logging.error(f'An error occured: {e}')
+                continue
             
-            # Ingest data to postgre database
-            insert_record_postgre(conn, cur, data)
-            print(f'Sent data to postgres database: {data}')
+            print(f'Produced day {day}-12-2023')
+            
+        print(f'Completed day {day}')
 
-            # produce data to Kakfa
-            producer.produce(
-                store_topic,
-                key=data["ts_id"],
-                value=json.dumps(data),
-                on_delivery=delivery_report
-            )
-            print('Produced voter {}, data: {}'.format(i, data))
-            producer.flush()
+stream_data()
+# ### Setting Airflow for automation
+# local_tz = pendulum.timezone("Asia/Ho_Chi_Minh")
+
+# default_args = {
+#     'owner': 'hauct',
+#     'start_date': datetime(2023, 12, 17, 17, 30, tzinfo=local_tz)
+# }
+
+# with DAG('fake_data_automation',
+#          default_args=default_args,
+#          schedule_interval='@daily',
+#          catchup=False) as dag:
+    
+#     streaming_task = PythonOperator(
+#         task_id = 'fake_data',
+#         python_callable=stream_data
+#     )

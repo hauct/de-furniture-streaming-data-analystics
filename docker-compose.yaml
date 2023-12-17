@@ -74,23 +74,6 @@ services:
       timeout: 10s
       retries: 5
 
-  postgres:
-    image: postgres:latest
-    container_name: postgres
-    ports:
-      - "5432:5432"
-    environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: store
-    networks:
-      - confluent
-    healthcheck:
-      test: [ "CMD", "pg_isready", "-U", "postgres" ]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
   spark-master:
     build: ./spark
     container_name: spark-master
@@ -99,10 +82,9 @@ services:
       - "9090:8080"
       - "7077:7077"
     volumes:
-      - ./sample_superstore.csv:/opt/bitnami/spark/sample_superstore.csv
+      - ./data/sample_superstore.csv:/opt/bitnami/spark/sample_superstore.csv
       - ./spark_stream.py:/opt/bitnami/spark/spark_stream.py:rw
-      - ./postgresql-42.7.1.jar:/opt/bitnami/spark/postgresql-42.7.1.jar
-      - ./requirements.txt:/opt/bitnami/spark/requirements.txt
+      - ./consume_data.py:/opt/bitnami/spark/consume_data.py:rw
     networks:
       - confluent
   
@@ -119,6 +101,88 @@ services:
       SPARK_MASTER_URL: spark://spark-master:7077
     networks:
       - confluent
+
+  cassandra_db:
+    image: cassandra:latest
+    container_name: cassandra
+    hostname: cassandra
+    ports:
+      - "9042:9042"
+    environment:
+      - MAX_HEAP_SIZE=512M
+      - HEAP_NEWSIZE=100M
+      - CASSANDRA_USERNAME=cassandra
+      - CASSANDRA_PASSWORD=cassandra
+    networks:
+      - confluent
+
+  webserver:
+    image: apache/airflow:2.6.0-python3.9
+    container_name: webserver
+    command: webserver
+    entrypoint: ['/opt/airflow/script/entrypoint_airflow.sh']
+    depends_on:
+      - postgres
+    environment:
+      - LOAD_EX=n
+      - EXECUTOR=Sequential
+      - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:airflow@postgres:5432/airflow
+      - AIRFLOW_WEBSERVER_SECRET_KEY=this_is_a_very_secured_key
+    logging:
+      options:
+        max-size: 10m
+        max-file: "3"
+    volumes:
+      - ./dags:/opt/airflow/dags
+      - ./scripts/entrypoint_airflow.sh:/opt/airflow/script/entrypoint_airflow.sh
+      - ./requirements.txt:/opt/airflow/requirements.txt
+      - ./data/sample_superstore.csv:/opt/airflow/data/sample_superstore.csv
+    ports:
+      - "8080:8080"
+    healthcheck:
+      test: ['CMD-SHELL', "[ -f /opt/airflow/airflow-webserver.pid ]"]
+      interval: 90s
+      timeout: 90s
+      retries: 3
+    networks:
+      - confluent
+
+  scheduler:
+    image: apache/airflow:2.6.0-python3.9
+    container_name: scheduler
+    depends_on:
+      webserver:
+        condition: service_healthy
+    volumes:
+      - ./dags:/opt/airflow/dags
+      - ./scripts/entrypoint_airflow.sh:/opt/airflow/script/entrypoint_airflow.sh
+      - ./requirements.txt:/opt/airflow/requirements.txt
+      - ./data/sample_superstore.csv:/opt/airflow/data/sample_superstore.csv
+    environment:
+      - LOAD_EX=n
+      - EXECUTOR=Sequential
+      - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:airflow@postgres:5432/airflow
+      - AIRFLOW_WEBSERVER_SECRET_KEY=this_is_a_very_secured_key
+    command: bash -c "pip install -r ./requirements.txt && airflow db upgrade && airflow scheduler"
+    networks:
+      - confluent
+
+  postgres:
+    image: postgres:latest
+    container_name: postgres
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: airflow
+      POSTGRES_PASSWORD: airflow
+      POSTGRES_DB: airflow
+    networks:
+      - confluent
+    healthcheck:
+      test: [ "CMD", "pg_isready", "-U", "postgres" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
 networks:
   confluent:
