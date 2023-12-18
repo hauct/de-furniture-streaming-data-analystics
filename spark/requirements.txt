@@ -60,3 +60,4 @@ geopy
 uuid
 pendulum
 cassandra-driver==3.28.0
+pathlib

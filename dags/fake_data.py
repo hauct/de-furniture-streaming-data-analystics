@@ -1,3 +1,7 @@
+import os
+import sys
+sys.path.insert(0,os.path.dirname(os.path.abspath(__file__)))
+
 from datetime import datetime, timedelta
 import pandas as pd
 import time
@@ -9,6 +13,8 @@ import simplejson as json
 from confluent_kafka import SerializingProducer
 import uuid
 import logging
+from pathlib import Path
+
 # import pendulum
 
 # from airflow import DAG
@@ -130,13 +136,23 @@ def generate_log(day, sample_df):
             }
     return data
 
+### Export to parquet
+def export_to_parquet(df, df_name):
+    path = f"./logs/{df_name}.parquet"
+    df.to_parquet(path, compression='gzip')
+    print(f'Exported: {path}')
+
 def stream_data():
     sample_df = pd.read_csv('./data/sample_superstore.csv')
     producer = SerializingProducer({'bootstrap.servers': 'broker:29092'})
     topic = 'store_daily_records'
 
     for day in range(1,32):
+        data_list = []
+        df_name = f'2023-12-{day}'
         for _ in range(random.randint(1,30)):
+            
+            # Generata records and produce to Kafka
             try:
                 data = generate_log(day, sample_df)
                 producer.produce(topic, key=data["ts_id"], value=json.dumps(data).encode('utf-8'))
@@ -145,13 +161,20 @@ def stream_data():
                 logging.error(f'An error occured: {e}')
                 continue
             
-            print(f'Produced day {day}-12-2023')
+            print(f'Produced day {df_name}')
             
+            # Aggregate data of this date to export parquet file
+            data_list.append(data)
+        
+        # Export to parquet file
+        df = pd.DataFrame(data_list)
+        export_to_parquet(df, df_name)
+        
         print(f'Completed day {day}')
 
 stream_data()
 # ### Setting Airflow for automation
-# local_tz = pendulum.timezone("Asia/Ho_Chi_Minh")
+# local_tz = pendulum.timezone("Asia/Ho_Chi_Minh")  
 
 # default_args = {
 #     'owner': 'hauct',

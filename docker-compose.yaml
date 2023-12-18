@@ -134,6 +134,7 @@ services:
         max-file: "3"
     volumes:
       - ./dags:/opt/airflow/dags
+      - ./logs:/opt/airflow/logs
       - ./scripts/entrypoint_airflow.sh:/opt/airflow/script/entrypoint_airflow.sh
       - ./requirements.txt:/opt/airflow/requirements.txt
       - ./data/sample_superstore.csv:/opt/airflow/data/sample_superstore.csv
