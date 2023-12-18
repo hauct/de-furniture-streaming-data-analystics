@@ -65,20 +65,27 @@ def create_keyspace(session):
     
 def create_table(session):
     session.execute("""
-        CREATE TABLE IF NOT EXISTS spark_streams.store_daily_records (
-            ts_id TEXT PRIMARY KEY,
-            ts TIMESTAMP,
-            customer_id TEXT,
-            customer_name TEXT,
-            segment TEXT,
-            country TEXT,
-            city TEXT,
-            category TEXT,
-            sub_category TEXT,
-            price TEXT,
-            quantity TEXT,
-            revenue TEXT,
-            lat_long TEXT)  
+    CREATE TABLE IF NOT EXISTS spark_streams.store_daily_records (
+        ts_id TEXT PRIMARY KEY,
+        ts TIMESTAMP,
+        ts_date TEXT,
+        customer_id TEXT,
+        customer_name TEXT,
+        segment TEXT,
+        country TEXT,
+        city TEXT,
+        category TEXT,
+        sub_category TEXT,
+        price TEXT,
+        quantity TEXT,
+        revenue TEXT,
+        lat_long TEXT);
+    """)
+    session.execute("""
+    CREATE TABLE IF NOT EXISTS spark_streams.number_customer_rev (
+        ts_date TEXT PRIMARY KEY,
+        number_customer TEXT,
+        sum_rev TEXT)
     """)
 
 def connect_to_kafka(spark_conn):
@@ -100,6 +107,7 @@ def create_selection_df_from_kafka(spark_df):
     schema = StructType([
         StructField("ts_id", StringType(), False),
         StructField("ts", TimestampType(), False),
+        StructField("ts_date", DateType(), False),
         StructField("customer_id", StringType(), False),
         StructField("customer_name", StringType(), False),
         StructField("segment", StringType(), False),
@@ -114,9 +122,8 @@ def create_selection_df_from_kafka(spark_df):
     ])
 
     sel = spark_df.selectExpr("CAST(value AS STRING)") \
-        .select(from_json(col('value'), schema).alias('data')).select("data.*")
-    print(sel)
-
+        .select(from_json(col('value'), schema).alias('data')).select("data.*")\
+        .withWatermark("ts", "1 minute")
     return sel
 
 
@@ -136,10 +143,48 @@ if __name__=="__main__":
             
             logging.info("Streaming is being started...")
 
-            streaming_query = (selection_df.writeStream.format("org.apache.spark.sql.cassandra")
-                               .option('checkpointLocation', '/tmp/checkpoint')
-                               .option('keyspace', 'spark_streams')
-                               .option('table', 'store_daily_records')
-                               .start())
+            streaming_query = selection_df.writeStream.format("org.apache.spark.sql.cassandra")\
+                               .option('checkpointLocation', '/tmp/checkpoint')\
+                               .option('keyspace', 'spark_streams')\
+                               .option('table', 'store_daily_records')\
+                               .start()
+            
+            number_customer_rev = selection_df\
+                               .groupBy('ts_date')\
+                               .agg(approx_count_distinct(col('customer_id')).alias('number_customer'),
+                                    sum(col('revenue')).alias('sum_rev'))
+            
+            # Write aggregated data to Kafka topics
+            number_customer_rev_to_kafka = number_customer_rev.selectExpr("to_json(struct(*)) AS value")\
+                            .writeStream.format("kafka")\
+                            .option('kafka.bootstrap.servers', 'broker:29092')\
+                            .option('topic', 'number_customer_rev')\
+                            .option('checkpointLocation', '/tmp/checkpoint1')\
+                            .outputMode("update")\
+                            .start()
+
+            schema = StructType([
+                        StructField("ts_date", DateType(), False),
+                        StructField("number_customer", StringType(), False),
+                        StructField("sum_rev", StringType(), False)])
+
+            number_customer_stream = spark_conn.readStream \
+                            .format('kafka') \
+                            .option('kafka.bootstrap.servers', 'broker:29092') \
+                            .option('subscribe', 'number_customer_rev') \
+                            .option('startingOffsets', 'earliest') \
+                            .load()
+
+            number_customer_stream_df = number_customer_stream.selectExpr("CAST(value AS STRING)") \
+                            .select(from_json(col('value'), schema).alias('data')).select("data.*")
+            
+            number_customer_rev_to_cassandra = number_customer_stream_df\
+                            .writeStream.format("org.apache.spark.sql.cassandra")\
+                            .option('checkpointLocation', '/tmp/checkpoint')\
+                            .option('keyspace', 'spark_streams')\
+                            .option('table', 'number_customer_rev')\
+                            .start()
 
             streaming_query.awaitTermination()
+            # number_customer_rev_to_kafka.awaitTermination()
+            number_customer_rev_to_cassandra.awaitTermination()

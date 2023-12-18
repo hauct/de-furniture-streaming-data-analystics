@@ -113,6 +113,7 @@ def generate_log(day, sample_df):
     
     data = {'ts_id': str(uuid.uuid4()),
             'ts':f'{ts}',
+            'ts_date':f'{ts[:10]}',
             'customer_id':customer_info_dict['customer_id'],
             'customer_name':customer_info_dict['customer_name'],
             'segment':customer_info_dict['segment'],
