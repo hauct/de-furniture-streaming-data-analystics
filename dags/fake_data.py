@@ -131,7 +131,8 @@ def generate_log(day, sample_df):
             'price':product_info_dict['price'],
             'quantity':f'{quantity}',
             'discount':f'{discount}',
-            'revenue': float(product_info_dict['price'])*quantity*(1-discount),
+            'revenue': float(product_info_dict['price'])*quantity,
+            'profit': float(product_info_dict['price'])*quantity*(1-discount), 
             'lat_long': get_lat_long(customer_info_dict['city'], customer_info_dict['country'])
             }
     return data
@@ -145,7 +146,7 @@ def export_to_parquet(df, df_name):
 def stream_data():
     sample_df = pd.read_csv('./data/sample_superstore.csv')
     producer = SerializingProducer({'bootstrap.servers': 'broker:29092'})
-    topic = 'store_daily_records'
+    topic = 'daily_records'
 
     for day in range(1,32):
         data_list = []

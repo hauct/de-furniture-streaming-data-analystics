@@ -83,8 +83,8 @@ services:
       - "7077:7077"
     volumes:
       - ./data/sample_superstore.csv:/opt/bitnami/spark/sample_superstore.csv
-      - ./spark_stream.py:/opt/bitnami/spark/spark_stream.py:rw
       - ./consume_data.py:/opt/bitnami/spark/consume_data.py:rw
+      - ./consume_data_new.py:/opt/bitnami/spark/consume_data_new.py:rw
     networks:
       - confluent
   
