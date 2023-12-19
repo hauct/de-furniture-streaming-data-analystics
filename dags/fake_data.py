@@ -15,10 +15,10 @@ import uuid
 import logging
 from pathlib import Path
 
-# import pendulum
+import pendulum
 
-# from airflow import DAG
-# from airflow.operators.python import PythonOperator
+from airflow import DAG
+from airflow.operators.python import PythonOperator
 
 
 # ## Kafka settings
@@ -139,7 +139,7 @@ def generate_log(day, sample_df):
 
 ### Export to parquet
 def export_to_parquet(df, df_name):
-    path = f"./logs/{df_name}.parquet"
+    path = f"./records/{df_name}.parquet"
     df.to_parquet(path, compression='gzip')
     print(f'Exported: {path}')
 
@@ -173,21 +173,20 @@ def stream_data():
         
         print(f'Completed day {day}')
 
-stream_data()
-# ### Setting Airflow for automation
-# local_tz = pendulum.timezone("Asia/Ho_Chi_Minh")  
+### Setting Airflow for automation
+local_tz = pendulum.timezone("Asia/Ho_Chi_Minh")  
 
-# default_args = {
-#     'owner': 'hauct',
-#     'start_date': datetime(2023, 12, 17, 17, 30, tzinfo=local_tz)
-# }
+default_args = {
+    'owner': 'hauct',
+    'start_date': datetime(2023, 12, 19, 22, 30, tzinfo=local_tz)
+}
 
-# with DAG('fake_data_automation',
-#          default_args=default_args,
-#          schedule_interval='@daily',
-#          catchup=False) as dag:
+with DAG('fake_data_automation',
+         default_args=default_args,
+         schedule_interval='@daily',
+         catchup=False) as dag:
     
-#     streaming_task = PythonOperator(
-#         task_id = 'fake_data',
-#         python_callable=stream_data
-#     )
+    streaming_task = PythonOperator(
+        task_id = 'fake_data',
+        python_callable=stream_data
+    )

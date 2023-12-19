@@ -84,7 +84,6 @@ services:
     volumes:
       - ./data/sample_superstore.csv:/opt/bitnami/spark/sample_superstore.csv
       - ./consume_data.py:/opt/bitnami/spark/consume_data.py:rw
-      - ./consume_data_new.py:/opt/bitnami/spark/consume_data_new.py:rw
     networks:
       - confluent
   
@@ -134,7 +133,7 @@ services:
         max-file: "3"
     volumes:
       - ./dags:/opt/airflow/dags
-      - ./logs:/opt/airflow/logs
+      - ./records:/opt/airflow/records
       - ./scripts/entrypoint_airflow.sh:/opt/airflow/script/entrypoint_airflow.sh
       - ./requirements.txt:/opt/airflow/requirements.txt
       - ./data/sample_superstore.csv:/opt/airflow/data/sample_superstore.csv
@@ -156,6 +155,7 @@ services:
         condition: service_healthy
     volumes:
       - ./dags:/opt/airflow/dags
+      - ./records:/opt/airflow/records
       - ./scripts/entrypoint_airflow.sh:/opt/airflow/script/entrypoint_airflow.sh
       - ./requirements.txt:/opt/airflow/requirements.txt
       - ./data/sample_superstore.csv:/opt/airflow/data/sample_superstore.csv

@@ -111,6 +111,7 @@ def connect_to_kafka(spark_conn, topic):
             .option('kafka.bootstrap.servers', 'broker:29092') \
             .option('subscribe', topic) \
             .option('startingOffsets', 'earliest') \
+            .option("failOnDataLoss", "false")\
             .load()
         logging.info("kafka dataframe created successfully")
     except Exception as e:
@@ -162,7 +163,8 @@ if __name__=="__main__":
         StructField("profit", FloatType(), False),
         StructField("lat_long", StringType(), False)
     ])
-    daily_records_df = create_selection_df_from_kafka(daily_records_stream, daily_records_schema)
+    daily_records_df = create_selection_df_from_kafka(daily_records_stream, daily_records_schema)\
+                        .withWatermark("ts", "1 minute")
     
     ## Streaming to CassandraDB    
     daily_records_to_cassandra = daily_records_df.writeStream.format("org.apache.spark.sql.cassandra")\
@@ -208,9 +210,9 @@ if __name__=="__main__":
     ## Streaming to CassandraDB
     daily_pu_rev_to_cassandra = daily_pu_rev_df\
                     .writeStream.format("org.apache.spark.sql.cassandra")\
-                    .option('checkpointLocation', '/tmp/checkpoint2')\
                     .option('keyspace', keyspace)\
                     .option('table', daily_pu_rev_topic)\
+                    .option('checkpointLocation', '/tmp/checkpoint3')\
                     .start()
 
     #============================================================#
@@ -231,7 +233,7 @@ if __name__=="__main__":
                     .writeStream.format("kafka")\
                     .option('kafka.bootstrap.servers', 'broker:29092')\
                     .option('topic', daily_category_product_topic)\
-                    .option('checkpointLocation', '/tmp/checkpoint3')\
+                    .option('checkpointLocation', '/tmp/checkpoint4')\
                     .outputMode("update")\
                     .start()
 
@@ -253,9 +255,9 @@ if __name__=="__main__":
     ## Streaming to CassandraDB
     daily_category_product_to_cassandra = daily_category_product_df\
                     .writeStream.format("org.apache.spark.sql.cassandra")\
-                    .option('checkpointLocation', '/tmp/checkpoint3')\
                     .option('keyspace', keyspace)\
                     .option('table', daily_category_product_topic)\
+                    .option('checkpointLocation', '/tmp/checkpoint5')\
                     .start()
 
     #============================================================#
