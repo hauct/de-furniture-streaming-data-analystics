@@ -84,6 +84,7 @@ services:
     volumes:
       - ./data/sample_superstore.csv:/opt/bitnami/spark/sample_superstore.csv
       - ./consume_data.py:/opt/bitnami/spark/consume_data.py:rw
+      - ./consume_data_copy.py:/opt/bitnami/spark/consume_data_copy.py:rw
     networks:
       - confluent
   
@@ -171,6 +172,7 @@ services:
   postgres:
     image: postgres:latest
     container_name: postgres
+    hostname: postgres
     ports:
       - "5432:5432"
     environment:
@@ -184,6 +186,20 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+
+  superset:
+    build:
+      context: ./superset
+      dockerfile: Dockerfile
+    container_name: superset
+    environment:
+      - ADMIN_USERNAME=admin
+      - ADMIN_EMAIL=admin@superset.com
+      - ADMIN_PASSWORD=admin
+    ports:
+      - '8088:8088'
+    networks:
+      - confluent
 
 networks:
   confluent:
