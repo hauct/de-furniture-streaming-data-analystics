@@ -20,43 +20,6 @@ import pendulum
 from airflow import DAG
 from airflow.operators.python import PythonOperator
 
-
-# ## Kafka settings
-# def delivery_report(err, msg):
-#     if err is not None:
-#         print(f'Message delivery failed: {err}')
-#     else:
-#         print(f'Message delivered to {msg.topic()} [{msg.partition()}]')
-
-# ## Postgres settings
-# def create_table(conn, cur):
-#     cur.execute("""
-#         CREATE TABLE IF NOT EXISTS store_record (
-#             ts_id TEXT PRIMARY KEY,
-#             ts TIMESTAMP,
-#             customer_id VARCHAR(255),
-#             customer_name VARCHAR(255),
-#             segment VARCHAR(255),
-#             country VARCHAR(255),
-#             city VARCHAR(255),
-#             category VARCHAR(255),
-#             sub_category VARCHAR(255),
-#             price FLOAT,
-#             quantity INTEGER,
-#             revenue FLOAT,
-#             lat_long point                
-#         )
-#     """)
-#     conn.commit()
-
-# def insert_record_postgre(conn, cur, data):
-#     cur.execute('''
-#         INSERT INTO store_record (ts_id, ts, customer_id, customer_name, segment, country, city, category, sub_category, price, quantity, revenue, lat_long)
-#         VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-#     ''', (data['ts_id'], data['ts'], data['customer_id'], data['customer_name'], data['segment'], data['country'],
-#           data['city'], data['category'], data['sub_category'], data['price'], data['quantity'], data['revenue'], data['lat_long']))
-#     conn.commit()
-
 ## -----------------Get a random customer information---------------------
 def extract_customer_info(sample_df):
     customer_info_df = sample_df.loc[:, ["customer_id", "customer_name", 'segment', 'country', 'city']]
@@ -85,7 +48,6 @@ def generate_product_info(product_info):
 ## -----------------Get random number of records--------------------------
 ### Generate a random date in December 2023
 def generate_date_time(day):
-    day = random.randint(1, 31)
     hour = random.randint(0, 23)
     minute = random.randint(0, 59)
     second = random.randint(0, 59)
@@ -129,7 +91,7 @@ def generate_log(day, sample_df):
             'sub_category':product_info_dict['sub_category'],
             'product_name':product_info_dict['product_name'],
             'price':product_info_dict['price'],
-            'quantity':f'{quantity}',
+            'quantity':quantity,
             'discount':f'{discount}',
             'revenue': float(product_info_dict['price'])*quantity,
             'profit': float(product_info_dict['price'])*quantity*(1-discount), 
@@ -143,7 +105,7 @@ def export_to_parquet(df, df_name):
     df.to_parquet(path, compression='gzip')
     print(f'Exported: {path}')
 
-def stream_data():
+def fake_data():
     sample_df = pd.read_csv('./data/sample_superstore.csv')
     producer = SerializingProducer({'bootstrap.servers': 'broker:29092'})
     topic = 'daily_records'
@@ -167,7 +129,7 @@ def stream_data():
             # Aggregate data of this date to export parquet file
             data_list.append(data)
         
-        # Export to parquet file
+        # # Export to parquet file
         df = pd.DataFrame(data_list)
         export_to_parquet(df, df_name)
         
@@ -178,7 +140,7 @@ local_tz = pendulum.timezone("Asia/Ho_Chi_Minh")
 
 default_args = {
     'owner': 'hauct',
-    'start_date': datetime(2023, 12, 19, 22, 30, tzinfo=local_tz)
+    'start_date': datetime(2023, 12, 23, 14, 50, tzinfo=local_tz)
 }
 
 with DAG('fake_data_automation',
@@ -188,5 +150,5 @@ with DAG('fake_data_automation',
     
     streaming_task = PythonOperator(
         task_id = 'fake_data',
-        python_callable=stream_data
+        python_callable=fake_data
     )

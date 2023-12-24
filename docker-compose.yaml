@@ -83,8 +83,8 @@ services:
       - "7077:7077"
     volumes:
       - ./data/sample_superstore.csv:/opt/bitnami/spark/sample_superstore.csv
-      - ./consume_data.py:/opt/bitnami/spark/consume_data.py:rw
-      - ./consume_data_copy.py:/opt/bitnami/spark/consume_data_copy.py:rw
+      - ./spark_stream_cassandra.py:/opt/bitnami/spark/spark_stream_cassandra.py:rw
+      - ./spark_stream_postgre.py:/opt/bitnami/spark/spark_stream_postgre.py:rw
     networks:
       - confluent
   
@@ -196,6 +196,8 @@ services:
       - ADMIN_USERNAME=admin
       - ADMIN_EMAIL=admin@superset.com
       - ADMIN_PASSWORD=admin
+    volumes:
+      - ./superset/superset-init.sh:/opt/airflow/dags
     ports:
       - '8088:8088'
     networks:

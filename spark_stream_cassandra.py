@@ -1,36 +1,21 @@
-# # Function to create a Kafka consumer
-# def create_kafka_consumer(topic_name):
-#     # Set up a Kafka consumer with specified topic and configurations
-#     consumer = KafkaConsumer(
-#         topic_name,
-#         bootstrap_servers='localhost:9092',
-#         auto_offset_reset='earliest',
-#         value_deserializer=lambda x: json.loads(x.decode('utf-8')))
-#     return consumer
-
-# # Function to fetch data from Kafka
-# def fetch_data_from_kafka(consumer):
-#     # Poll Kafka consumer for messages within a timeout period
-#     messages = consumer.poll(timeout_ms=1000)
-#     data = []
-
-#     # Extract data from received messages
-#     for message in messages.values():
-#         data.append(message.value)
-#     return data
-
 import logging
 from cassandra.cluster import Cluster
+import psycopg2
+from confluent_kafka import Consumer, KafkaException, KafkaError
+import json
+import multiprocessing
+
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import *
 from pyspark.sql.types import *
 
+# ============ SPARK FOMULAS ============
 def create_spark_connection():
     spark_conn = None
 
     try:
         spark_conn = SparkSession.builder \
-            .appName('SparkDataStreaming') \
+            .appName('CassandraStreaming') \
             .config('spark.jars.packages', "com.datastax.spark:spark-cassandra-connector-assembly_2.12:3.3.0,"
                                            "org.apache.spark:spark-sql-kafka-0-10_2.12:3.3.0") \
             .config('spark.cassandra.connection.host', 'cassandra') \
@@ -43,66 +28,7 @@ def create_spark_connection():
 
     return spark_conn
 
-def create_cassandra_connection():
-    try:
-        # connecting to the cassandra cluster
-        cluster = Cluster(['cassandra'])
-
-        cas_session = cluster.connect()
-
-        return cas_session
-    except Exception as e:
-        logging.error(f"Could not create cassandra connection due to {e}")
-        return None
-
-def create_keyspace(session):
-    session.execute("""
-        CREATE KEYSPACE IF NOT EXISTS spark_streams
-        WITH replication = {'class': 'SimpleStrategy', 'replication_factor': '1'};
-    """)
-
-    print("Keyspace created successfully!")
-    
-def create_table(session):
-    # store_daily_records
-    session.execute("""
-    CREATE TABLE IF NOT EXISTS spark_streams.daily_records (
-        ts_id TEXT PRIMARY KEY,
-        ts TIMESTAMP,
-        ts_date TEXT,
-        customer_id TEXT,
-        customer_name TEXT,
-        segment TEXT,
-        country TEXT,
-        city TEXT,
-        category TEXT,
-        sub_category TEXT,
-        product_name TEXT,
-        price TEXT,
-        quantity TEXT,
-        revenue TEXT,
-        profit TEXT,
-        lat_long TEXT);
-    """)
-    session.execute("""
-    CREATE TABLE IF NOT EXISTS spark_streams.daily_pu_rev (
-        ts_date TEXT PRIMARY KEY,
-        daily_pu TEXT,
-        daily_rev TEXT,
-        daily_profit TEXT)
-    """)
-    session.execute("""
-    CREATE TABLE IF NOT EXISTS spark_streams.daily_category_product (
-        ts_date TEXT,
-        category TEXT,
-        sub_category TEXT,
-        product_name TEXT,
-        daily_quantity TEXT,
-        daily_rev TEXT,
-        daily_profit TEXT,
-        PRIMARY KEY ((ts_date, category, sub_category, product_name)))
-    """)
-
+# ============ KAFKA FOMULAS ============
 def connect_to_kafka(spark_conn, topic):
     spark_df = None
     try:
@@ -122,28 +48,93 @@ def connect_to_kafka(spark_conn, topic):
 def create_selection_df_from_kafka(spark_df, schema):
     sel = spark_df.selectExpr("CAST(value AS STRING)") \
         .select(from_json(col('value'), schema).alias('data')).select("data.*")
-        
     return sel
 
+# ============ CASSANDRA FOMULAS ============
+def create_cassandra_connection():
+    try:
+        # connecting to the cassandra cluster
+        cluster = Cluster(['cassandra'])
+
+        c_session = cluster.connect()
+
+        return c_session
+    except Exception as e:
+        logging.error(f"Could not create cassandra connection due to {e}")
+        return None
+    
+def create_cassandra_table(c_session):
+    # Create keyspace
+    c_session.execute("""
+        CREATE KEYSPACE IF NOT EXISTS spark_streams
+        WITH replication = {'class': 'SimpleStrategy', 'replication_factor': '1'};
+    """)
+    print("Keyspace created successfully!")
+    
+    # Create tables
+    c_session.execute("""
+    CREATE TABLE IF NOT EXISTS spark_streams.daily_records (
+        ts_id TEXT PRIMARY KEY,
+        ts TIMESTAMP,
+        ts_date DATE,
+        customer_id TEXT,
+        customer_name TEXT,
+        segment TEXT,
+        country TEXT,
+        city TEXT,
+        category TEXT,
+        sub_category TEXT,
+        product_name TEXT,
+        price FLOAT,
+        quantity INT,
+        revenue FLOAT,
+        profit FLOAT,
+        lat_long TEXT);
+    """)
+    c_session.execute("""
+    CREATE TABLE IF NOT EXISTS spark_streams.daily_pu_rev (
+        ts_date TEXT PRIMARY KEY,
+        daily_pu TEXT,
+        daily_rev TEXT,
+        daily_profit TEXT)
+    """)
+    c_session.execute("""
+    CREATE TABLE IF NOT EXISTS spark_streams.daily_category_product (
+        ts_date TEXT,
+        category TEXT,
+        sub_category TEXT,
+        product_name TEXT,
+        daily_quantity TEXT,
+        daily_rev TEXT,
+        daily_profit TEXT,
+        PRIMARY KEY ((ts_date, category, sub_category, product_name)))
+    """)
+
+    c_session.execute("""
+    CREATE TABLE IF NOT EXISTS spark_streams.daily_address (
+        ts_date TEXT,
+        lat_long TEXT,
+        daily_pu TEXT,
+        PRIMARY KEY ((ts_date, lat_long)))
+    """)
+
+    print("Cassandra tables created successfully!")
 
 if __name__=="__main__":
-    # Connect to CassandraDB, create keyspace and tables
-    session = create_cassandra_connection()
-    
-    create_keyspace(session)
-    keyspace = 'spark_streams'
-
-    create_table(session)
-
-    # create spark connection
+    # Create spark connection
     spark_conn = create_spark_connection()
     
-    #============================================================#
-    # Streaming 'store_daily_records' from Kafka to CassandraDB
+    #============================================================
+    # Stream 'store_daily_records' from Kafka to CassandraDB
     ## Connect to kafka with spark connection
     daily_records_topic = 'daily_records'
     daily_records_stream = connect_to_kafka(spark_conn, daily_records_topic)
-    
+
+    ## Connect to CassandraDB, create keyspace and tables
+    keyspace = 'spark_streams'
+    c_session = create_cassandra_connection()
+    create_cassandra_table(c_session)
+
     ## Get the Spark dataframe stream
     daily_records_schema = StructType([
         StructField("ts_id", StringType(), False),
@@ -166,14 +157,14 @@ if __name__=="__main__":
     daily_records_df = create_selection_df_from_kafka(daily_records_stream, daily_records_schema)\
                         .withWatermark("ts", "1 minute")
     
-    ## Streaming to CassandraDB    
+    ## Stream to CassandraDB    
     daily_records_to_cassandra = daily_records_df.writeStream.format("org.apache.spark.sql.cassandra")\
                         .option('checkpointLocation', '/tmp/checkpoint1')\
                         .option('keyspace', keyspace)\
                         .option('table', daily_records_topic)\
                         .start()
 
-    #============================================================#
+    #============================================================
     # Streaming 'daily_pu_rev' to Kafka and to CassandraDB
     '''
     daily_pu_rev: How many people buy and how much revenue there is per day
@@ -261,9 +252,49 @@ if __name__=="__main__":
                     .start()
 
     #============================================================#
+    # Streaming 'daily_address' to Kafka and to CassandraDB
+    '''
+    daily_address: Number of address (lattitude and longitude) of paying users
+    '''
+    ## Aggregate from daily_category_product   
+    daily_address = daily_records_df\
+                        .groupBy('ts_date', 'lat_long')\
+                        .agg(approx_count_distinct(col('customer_id')).alias('daily_pu'))
+
+    ## Write aggregated data to Kafka topics
+    daily_address_topic = 'daily_address'
+    daily_address_to_kafka = daily_address.selectExpr("to_json(struct(*)) AS value")\
+                    .writeStream.format("kafka")\
+                    .option('kafka.bootstrap.servers', 'broker:29092')\
+                    .option('topic', daily_address_topic)\
+                    .option('checkpointLocation', '/tmp/checkpoint4')\
+                    .outputMode("update")\
+                    .start()
+
+    ## Connect to kafka with spark connection
+    daily_address_stream = connect_to_kafka(spark_conn, daily_address_topic)
+
+    ## Get the Spark dataframe stream
+    daily_address_schema = StructType([
+                StructField("ts_date", DateType(), False),
+                StructField("lat_long", StringType(), False),
+                StructField("daily_pu", StringType(), False)])
+
+    daily_address_df = create_selection_df_from_kafka(daily_address_stream, daily_address_schema)
+    
+    ## Streaming to CassandraDB
+    daily_address_to_cassandra = daily_address_df\
+                    .writeStream.format("org.apache.spark.sql.cassandra")\
+                    .option('keyspace', keyspace)\
+                    .option('table', daily_address_topic)\
+                    .option('checkpointLocation', '/tmp/checkpoint5')\
+                    .start()
+    #============================================================
     # Start Streaming
     logging.info("Streaming is being started...")
     
     daily_records_to_cassandra.awaitTermination()
     daily_pu_rev_to_cassandra.awaitTermination()
     daily_category_product_to_cassandra.awaitTermination()
+    daily_address_to_cassandra.awaitTermination()
+    

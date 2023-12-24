@@ -1,0 +1,14 @@
+
+docker exec -it spark-master bash
+python spark_stream_cassandra.py
+
+docker exec -it spark-master bash
+python spark_stream_postgre.py
+
+docker exec -it cassandra bash
+cqlsh -u cassandra -p cassandra
+
+docker exec -it postgres bash
+psql -h postgres -U airflow -p 5432
+airflow
+SELECT SUM("daily_rev") FROM daily_report.daily_category_product WHERE ts_date = '2023-12-01';
