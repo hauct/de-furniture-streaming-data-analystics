@@ -62,8 +62,7 @@ def get_lat_long(city, country):
     location = geolocator.geocode(f'{city}, {country}', timeout=10)
 
     if location:
-        lat_long = f"({location.latitude}, {location.longitude})"
-        return lat_long
+        return location.latitude, location.longitude
 
     return None
 
@@ -95,7 +94,8 @@ def generate_log(day, sample_df):
             'discount':f'{discount}',
             'revenue': float(product_info_dict['price'])*quantity,
             'profit': float(product_info_dict['price'])*quantity*(1-discount), 
-            'lat_long': get_lat_long(customer_info_dict['city'], customer_info_dict['country'])
+            'latitude': get_lat_long(customer_info_dict['city'], customer_info_dict['country'])[0],
+            'longitude': get_lat_long(customer_info_dict['city'], customer_info_dict['country'])[1]
             }
     return data
 
@@ -140,7 +140,7 @@ local_tz = pendulum.timezone("Asia/Ho_Chi_Minh")
 
 default_args = {
     'owner': 'hauct',
-    'start_date': datetime(2023, 12, 25, 8, 55, tzinfo=local_tz)
+    'start_date': datetime(2023, 12, 26, 0, 11, tzinfo=local_tz)
 }
 
 with DAG('fake_data_automation',

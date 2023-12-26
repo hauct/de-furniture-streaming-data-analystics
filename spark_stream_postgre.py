@@ -53,9 +53,10 @@ def create_postgre_table(conn, cur):
     cur.execute("""
     CREATE TABLE IF NOT EXISTS daily_report.daily_address (
         ts_date DATE,
-        lat_long TEXT, -- Specify the operator class
+        latitude TEXT,
+        longitude TEXT,
         daily_pu INTEGER,
-        PRIMARY KEY (ts_date, lat_long))
+        PRIMARY KEY (ts_date, latitude, longitude))
     """)
     
     conn.commit()
@@ -164,11 +165,11 @@ def consume_kafka_daily_address_to_postgres(conn, cur):
             record = json.loads(msg.value().decode('utf-8'))
             
             cur.execute(f"""
-                INSERT INTO daily_report.daily_address (ts_date, lat_long, daily_pu)
-                VALUES (%s, %s, %s) ON CONFLICT (ts_date, lat_long) DO UPDATE
+                INSERT INTO daily_report.daily_address (ts_date, latitude, longitude, daily_pu)
+                VALUES (%s, %s, %s, %s) ON CONFLICT (ts_date, latitude, longitude) DO UPDATE
                 SET daily_pu = EXCLUDED.daily_pu
                     """
-            , (record['ts_date'], record['lat_long'], record['daily_pu']))
+            , (record['ts_date'], record['latitude'], record['longitude'], record['daily_pu']))
 
             conn.commit()
 

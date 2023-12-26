@@ -89,7 +89,8 @@ def create_cassandra_table(c_session):
         quantity INT,
         revenue FLOAT,
         profit FLOAT,
-        lat_long TEXT);
+        latitude TEXT,
+        longitude TEXT);
     """)
     c_session.execute("""
     CREATE TABLE IF NOT EXISTS spark_streams.daily_pu_rev (
@@ -113,9 +114,10 @@ def create_cassandra_table(c_session):
     c_session.execute("""
     CREATE TABLE IF NOT EXISTS spark_streams.daily_address (
         ts_date TEXT,
-        lat_long TEXT,
+        latitude TEXT,
+        longitude TEXT.
         daily_pu TEXT,
-        PRIMARY KEY ((ts_date, lat_long)))
+        PRIMARY KEY ((ts_date, latitude, longitude)))
     """)
 
     print("Cassandra tables created successfully!")
@@ -152,7 +154,8 @@ if __name__=="__main__":
         StructField("quantity", IntegerType(), False),
         StructField("revenue", FloatType(), False),
         StructField("profit", FloatType(), False),
-        StructField("lat_long", StringType(), False)
+        StructField("latitude", StringType(), False),
+        StructField("longitude", StringType(), False)
     ])
     daily_records_df = create_selection_df_from_kafka(daily_records_stream, daily_records_schema)\
                         .withWatermark("ts", "1 minute")
@@ -254,11 +257,11 @@ if __name__=="__main__":
     #============================================================#
     # Streaming 'daily_address' to Kafka and to CassandraDB
     '''
-    daily_address: Number of address (lattitude and longitude) of paying users
+    daily_address: Number of address (latitude and longitude) of paying users
     '''
     ## Aggregate from daily_category_product   
     daily_address = daily_records_df\
-                        .groupBy('ts_date', 'lat_long')\
+                        .groupBy('ts_date', 'latitude', 'longitude')\
                         .agg(approx_count_distinct(col('customer_id')).alias('daily_pu'))
 
     ## Write aggregated data to Kafka topics
@@ -277,7 +280,8 @@ if __name__=="__main__":
     ## Get the Spark dataframe stream
     daily_address_schema = StructType([
                 StructField("ts_date", DateType(), False),
-                StructField("lat_long", StringType(), False),
+                StructField("latitude", StringType(), False),
+                StructField("longitude", StringType(), False),
                 StructField("daily_pu", StringType(), False)])
 
     daily_address_df = create_selection_df_from_kafka(daily_address_stream, daily_address_schema)
