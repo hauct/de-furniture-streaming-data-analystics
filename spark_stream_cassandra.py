@@ -267,7 +267,7 @@ if __name__=="__main__":
                     .writeStream.format("kafka")\
                     .option('kafka.bootstrap.servers', 'broker:29092')\
                     .option('topic', daily_address_topic)\
-                    .option('checkpointLocation', '/tmp/checkpoint4')\
+                    .option('checkpointLocation', '/tmp/checkpoint6')\
                     .outputMode("update")\
                     .start()
 
@@ -287,7 +287,7 @@ if __name__=="__main__":
                     .writeStream.format("org.apache.spark.sql.cassandra")\
                     .option('keyspace', keyspace)\
                     .option('table', daily_address_topic)\
-                    .option('checkpointLocation', '/tmp/checkpoint5')\
+                    .option('checkpointLocation', '/tmp/checkpoint7')\
                     .start()
     #============================================================
     # Start Streaming

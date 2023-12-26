@@ -140,7 +140,7 @@ local_tz = pendulum.timezone("Asia/Ho_Chi_Minh")
 
 default_args = {
     'owner': 'hauct',
-    'start_date': datetime(2023, 12, 23, 14, 50, tzinfo=local_tz)
+    'start_date': datetime(2023, 12, 25, 8, 55, tzinfo=local_tz)
 }
 
 with DAG('fake_data_automation',
