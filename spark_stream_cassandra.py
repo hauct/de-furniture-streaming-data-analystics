@@ -115,7 +115,7 @@ def create_cassandra_table(c_session):
     CREATE TABLE IF NOT EXISTS spark_streams.daily_address (
         ts_date TEXT,
         latitude TEXT,
-        longitude TEXT.
+        longitude TEXT,
         daily_pu TEXT,
         PRIMARY KEY ((ts_date, latitude, longitude)))
     """)

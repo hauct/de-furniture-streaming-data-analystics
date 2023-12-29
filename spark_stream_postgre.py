@@ -53,8 +53,8 @@ def create_postgre_table(conn, cur):
     cur.execute("""
     CREATE TABLE IF NOT EXISTS daily_report.daily_address (
         ts_date DATE,
-        latitude TEXT,
-        longitude TEXT,
+        latitude FLOAT,
+        longitude FLOAT,
         daily_pu INTEGER,
         PRIMARY KEY (ts_date, latitude, longitude))
     """)

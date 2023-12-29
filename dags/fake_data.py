@@ -94,8 +94,8 @@ def generate_log(day, sample_df):
             'discount':f'{discount}',
             'revenue': float(product_info_dict['price'])*quantity,
             'profit': float(product_info_dict['price'])*quantity*(1-discount), 
-            'latitude': get_lat_long(customer_info_dict['city'], customer_info_dict['country'])[0],
-            'longitude': get_lat_long(customer_info_dict['city'], customer_info_dict['country'])[1]
+            'latitude': float(get_lat_long(customer_info_dict['city'], customer_info_dict['country'])[0]),
+            'longitude': float(get_lat_long(customer_info_dict['city'], customer_info_dict['country'])[1])
             }
     return data
 
