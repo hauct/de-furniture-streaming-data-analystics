@@ -3,7 +3,7 @@
 ## Table of Contents
 - [Introduction](#introduction)
 - [System Architecture](#system-architecture)
-- [System Components](#system-components).
+- [System Components](#system-components)
 - [What You'll Learn](#what-youll-learn)
 - [Technologies](#technologies)
 - [Walkthrough](#walkthrough)
