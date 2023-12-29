@@ -9,7 +9,7 @@
 - [Walkthrough](#walkthrough)
 
 ## Introduction
-The purpose of this project is to build a data pipeline that will collect daily records from an electronics store, store the raw data in a Cassandra database, aggregate the data into a Postgres database, and then use Superset to visualize the data. The goal is to provide end users with real-time reports.
+The purpose of this project is to build a data pipeline that will collect daily records from an furniture store, store the raw data in a Cassandra database, aggregate the data into a Postgres database, and then use Superset to visualize the data. The goal is to provide end users with real-time reports.
 
 ## System Architecture
 ![furniture-stream-architecture.png](imgs/furniture-stream-architecture.png)
